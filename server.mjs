@@ -1,46 +1,66 @@
-import express from "express";
-import cors from "cors";
-import sqlite3 from "sqlite3";
+import express from 'express';
+import sqlite3 from 'sqlite3';
+import bodyParser from 'body-parser';
+import cors from 'cors'
 
 const app = express();
-const port = 3000;
+app.use(bodyParser.json());
 app.use(cors());
 
-const db = new sqlite3.Database("articles.db");
+const db = new sqlite3.Database('products.db');
 
-db.run(`CREATE TABLE IF NOT EXISTS articles (
-  id INTEGER PRIMARY KEY,
-  name TEXT,
-  colors TEXT,
-  sizes TEXT,
-  retail_price REAL
-)`);
+db.run(`
+  CREATE TABLE IF NOT EXISTS products (
+    id INTEGER PRIMARY KEY,
+    name TEXT,
+    colors TEXT,  
+    sizes ARRAY, 
+    price REAL
+  )
+`);
 
-app.get("/articles", (req, res) => {
-  db.all("SELECT * FROM articles", (err, rows) => {
+app.get('/products', (req, res) => {
+  db.all('SELECT id, name, colors, CAST(sizes AS TEXT) as sizes, price FROM products', (err, rows) => {
     if (err) {
       res.status(500).json({ error: err.message });
       return;
     }
-    res.json(rows);
+
+    const products = rows.map(row => ({
+      id: row.id,
+      name: row.name,
+      colors: row.colors, 
+      sizes: JSON.parse(row.sizes),
+      price: row.price
+    }));
+
+    res.json({ products });
   });
 });
 
-app.get("/articles/:id", (req, res) => {
-  const id = parseInt(req.params.id);
-  db.get("SELECT * FROM articles WHERE id = ?", [id], (err, row) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
+app.post('/products', (req, res) => {
+  const { name, colors, sizes, price } = req.body;
+  if (!name || !colors || !sizes || !price) {
+    res.status(400).json({ error: 'Alle Felder müssen ausgefüllt sein.' });
+    return;
+  }
+  
+
+  const sizesJSON = JSON.stringify(sizes);
+  
+  db.run(
+    'INSERT INTO products (name, colors, sizes, price) VALUES (?, ?, ?, ?)',
+    [name, colors, JSON.stringify(sizes), price],
+    function (err) {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      res.json({ message: 'Produkt hinzugefügt', id: this.lastID });
     }
-    if (row) {
-      res.json(row);
-    } else {
-      res.status(404).json({ message: "Artikel nicht gefunden" });
-    }
-  });
+  );
 });
 
-app.listen(port, () => {
-  console.log(`Die API läuft auf http://localhost:${port}`);
+app.listen(3000, () => {
+  console.log('Server läuft auf Port 3000');
 });
